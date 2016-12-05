@@ -1,0 +1,230 @@
+<!doctype html>
+<style>
+#target {
+  position: absolute;
+}
+#results {
+  position: absolute;
+  top: 420px;
+}
+</style>
+
+<object id="target"
+        type="application/x-shockwave-flash"
+        data="target.swf"
+        width="800"
+        height="400">
+  <param name="movie" value="target.swf">
+  <param name="flashvars" value="">
+  <param name="allowScriptAccess" value="always">
+  <param name="allowNetworking" value="all">
+  <param name="wmode" value="opaque">
+  <param name="bgcolor" value="#000000">
+</object>
+
+<ul id="results">
+</ul>
+
+<script>
+  // setup test bench
+  var swf = document.querySelector('object');
+  var data = new Uint8Array(2 * 1024 * 1024); // 1 MB
+  for (var i = 0; i < data.length; i++) {
+    data[i] = Math.random() * 255;
+  }
+  var data32 = new Int32Array(data.buffer);
+  var results = document.querySelector('#results');
+
+  // methods to test
+  function externalInterfaceBtoA(data, swf, done) {
+    var binary = '';
+    var length = data.byteLength;
+
+    for (var i = 0; i < length; i++) {
+      binary += String.fromCharCode(data[i]);
+    }
+    var b64str = window.btoa(binary);
+    swf.send(b64str);
+    done();
+  }
+  function externalInterfaceBinary(data, swf, done) {
+    var binary = '';
+    var length = data.byteLength;
+
+    for (var i = 0; i < length; i++) {
+      binary += String.fromCharCode(data[i]);
+    }
+    swf.send(binary);
+    done();
+  }
+  function resizeStage(data, swf, done) {
+    var length = Math.min(data.byteLength, 1000);
+
+    for (var i = 0; i < length; i++) {
+      swf.width = data[i];
+    }
+    done();
+  }
+  function setVariableBtoA(data, swf, done) {
+    var binary = '';
+    var length = data.byteLength;
+
+    for (var i = 0; i < length; i++) {
+      binary += String.fromCharCode(data[i]);
+    }
+    var b64str = window.btoa(binary);
+    swf.SetVariable('send', b64str);
+    done();
+  }
+  function custom16BitEncoding(data, swf, done) {
+    var binary = '';
+    var shorts = new Uint16Array(data.buffer);
+    var length = shorts.length;
+
+    for (var i = 0; i < length; i++) {
+      binary += String.fromCharCode(shorts[i]);
+    }
+    swf.send(binary);
+    done();
+  }
+  function custom16BitReadAsWords(data, swf, done) {
+    var binary = '';
+    var words = data32;
+    var length = words.length;
+
+    for (var i = 0; i < length; i++) {
+      var word = words[i];
+      binary += String.fromCharCode(Math.max(65, Math.min(word >>> 16, 122)));
+      binary += String.fromCharCode(Math.max(65, Math.min(word, 122)));
+    }
+    swf.send(binary);
+    done();
+  }
+  function custom16BitAsWordsCallFunction(data, swf, done) {
+    var binary = '<invoke name="send" returntype="javascript"><arguments><string>';
+
+    var words = data32;
+    var length = words.length;
+
+    for (var i = 0; i < length; i++) {
+      var word = Math.max(65, Math.min(words[i], 122));
+      binary += String.fromCharCode(word >>> 16);
+      binary += String.fromCharCode(word);
+    }
+    binary += '</string></arguments></invoke>';
+    swf.CallFunction(binary);
+    done();
+  }
+  function nothingFancy(data, swf, done) {
+    swf.send(data);
+    done();
+  }
+  function urlLoaderToBlob(data, swf, done) {
+    var blob = new Blob([data], { type: 'video/x-flv' });
+    var url = URL.createObjectURL(blob);
+    var finished = false;
+    console.log(url);
+
+    window.__flash__loadComplete = function(error) {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      if (error) {
+        console.log('blob load error', error);
+        return done();
+      }
+
+      console.log('done with', url);
+      done();
+    };
+
+    swf.sendUrl(url);
+  }
+
+  var tests = [
+    externalInterfaceBtoA,
+
+    // very slow; not viable
+    // resizeStage,
+
+    // causes exceptions in IE, probably invalid characters in the
+    // transmitted string
+    // externalInterfaceBinary,
+    setVariableBtoA,
+
+    // causes exceptions in IE, probably invalid characters in the
+    // transmitted string
+    // custom16BitEncoding,
+
+    // clamping values in the transmitted string to ASCII was a big
+    // speed boost but it's not clear reading 32-bits at a time helps
+    custom16BitReadAsWords,
+
+    // security error
+    // urlLoaderToBlob,
+
+    // VERY slow
+    // nothingFancy,
+
+    // cuases exceptions in IE, probably invalid characters in the
+    // transmitted string
+    //custom16BitAsWordsCallFunction,
+  ];
+
+  function outputResult(name, duration) {
+    var li = document.createElement('li');
+    li.innerHTML = name + ': ' + duration.toFixed(0) + 'ms';
+
+    results.appendChild(li);
+  }
+
+  function testRunner(test, done) {
+    var i = 0;
+
+    return function runTest() {
+      if (i < 10) {
+        i++;
+        return test(data, swf, runTest);
+      }
+      done();
+    };
+  }
+
+  function testsRunner(done) {
+    var i = 0;
+    var test;
+    var testname;
+    var start;
+    var run;
+
+    return function runTests() {
+      if (i < tests.length) {
+        test = tests[i];
+        i++;
+
+        run = testRunner(test, function() {
+          console.profileEnd(testname);
+          outputResult(testname, performance.now() - start);
+          runTests();
+        });
+
+        testname = test.toString().match(/function\s*([^\(\s]+)/)[1];
+        console.profile(testname);
+        start = performance.now();
+
+        return run();
+      }
+      done();
+    };
+  }
+
+  (function waitForReady() {
+    if (!swf.send) {
+      return setTimeout(waitForReady, 100);
+    }
+    testsRunner(function() {
+      console.log('done');
+    })();
+  })();
+</script>

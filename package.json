@@ -1,0 +1,15 @@
+{
+  "name": "js-flash-throughput-experiments",
+  "version": "1.0.0",
+  "description": "Test bed for communicating between javascript and Flash",
+  "main": "index.html",
+  "scripts": {
+    "build": "mxmlc -output target.swf -static-link-runtime-shared-libraries Target.as",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "David LaPalomento",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "flex-sdk": "^4.6.0-0"
+  }
+}
