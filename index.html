@@ -2,10 +2,11 @@
 <style>
 #target {
   position: absolute;
+  top: 200px;
 }
-#results {
+#hello {
   position: absolute;
-  top: 420px;
+  top: 600px;
 }
 </style>
 
@@ -25,6 +26,7 @@
 <ul id="results">
 </ul>
 
+<script src="hello-swf.js"></script>
 <script>
   // setup test bench
   var swf = document.querySelector('object');
@@ -141,6 +143,26 @@
 
     swf.sendUrl(url);
   }
+  function dataUrlSwf() {
+    var object = document.createElement('object');
+    var blob = new Blob([swfData], { type: 'application/x-shockwave-flash' });
+    var url = URL.createObjectURL(blob);
+    var embed =
+      '<param name="movie" value="' + swfDataUrl + '">\n' +
+      '<param name="flashvars" value="">\n' +
+      '<param name="allowScriptAccess" value="always">\n' +
+      '<param name="allowNetworking" value="all">\n' +
+      '<param name="wmode" value="opaque">\n' +
+      '<param name="bgcolor" value="#000000">\n';
+
+    object.id =  'hello'
+    object.type = 'application/x-shockwave-flash';
+    object.data = swfDataUrl;
+    object.width = '800';
+    object.height = '400';
+    object.innerHTML = embed;
+    document.body.appendChild(object);
+  }
 
   var tests = [
     externalInterfaceBtoA,
@@ -223,6 +245,9 @@
     if (!swf.send) {
       return setTimeout(waitForReady, 100);
     }
+
+    dataUrlSwf();
+
     testsRunner(function() {
       console.log('done');
     })();
